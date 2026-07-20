@@ -1,0 +1,8 @@
+{
+    "name": "docflow-ai",
+    "private": true,
+    "workspaces":[
+        "src/api",
+        "src/worker"
+    ]
+}

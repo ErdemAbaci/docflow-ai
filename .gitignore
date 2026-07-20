@@ -1,0 +1,15 @@
+# Node
+node_modules/
+dist/
+
+# Terraform
+infra/.terraform/
+infra/terraform.tfstate
+infra/terraform.tfstate.backup
+infra/*.tfvars
+
+# Azure Functions
+local.settings.json
+
+# Claude Code (machine-local settings)
+.claude/settings.local.json
