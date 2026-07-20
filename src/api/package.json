@@ -12,11 +12,14 @@
     "test": "echo \"No tests yet...\""
   },
   "dependencies": {
-    "@azure/functions": "^4.0.0"
+    "@azure/cosmos": "^4.9.3",
+    "@azure/functions": "^4.0.0",
+    "@azure/service-bus": "^7.9.5",
+    "@azure/storage-blob": "^12.33.0"
   },
   "devDependencies": {
     "@types/node": "18.x",
-    "typescript": "^5.0.0",
-    "rimraf": "^5.0.0"
+    "rimraf": "^5.0.0",
+    "typescript": "^5.0.0"
   }
 }

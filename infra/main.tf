@@ -35,3 +35,38 @@ resource "azurerm_servicebus_queue" "document_processing" {
   namespace_id        = azurerm_servicebus_namespace.main.id
   max_delivery_count  = 5
 }
+
+resource "azurerm_cosmosdb_account" "main" {
+  name                = "cosmos-docflow-${random_string.storage_suffix.result}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  offer_type          = "Standard"
+  kind                = "GlobalDocumentDB"
+
+  consistency_policy {
+    consistency_level = "Session"
+  }
+
+  capabilities {
+    name = "EnableServerless"
+  }
+
+  geo_location {
+    location          = azurerm_resource_group.main.location
+    failover_priority = 0
+  }
+}
+
+resource "azurerm_cosmosdb_sql_database" "main" {
+  name                = "docflow"
+  resource_group_name = azurerm_resource_group.main.name
+  account_name        = azurerm_cosmosdb_account.main.name
+}
+
+resource "azurerm_cosmosdb_sql_container" "documents" {
+  name                = "documents"
+  resource_group_name = azurerm_resource_group.main.name
+  account_name        = azurerm_cosmosdb_account.main.name
+  database_name       = azurerm_cosmosdb_sql_database.main.name
+  partition_key_paths = ["/tenantId"]
+}
