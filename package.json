@@ -2,6 +2,7 @@
     "name": "docflow-ai",
     "private": true,
     "workspaces":[
+        "src/shared",
         "src/api",
         "src/worker"
     ]

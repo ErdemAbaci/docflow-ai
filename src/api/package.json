@@ -15,7 +15,8 @@
     "@azure/cosmos": "^4.9.3",
     "@azure/functions": "^4.0.0",
     "@azure/service-bus": "^7.9.5",
-    "@azure/storage-blob": "^12.33.0"
+    "@azure/storage-blob": "^12.33.0",
+    "@docflow/shared": "*"
   },
   "devDependencies": {
     "@types/node": "18.x",

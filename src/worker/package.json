@@ -11,7 +11,8 @@
   "dependencies": {
     "@azure/service-bus": "^7.9.0",
     "@azure/cosmos": "^4.1.0",
-    "dotenv": "^16.4.0"
+    "dotenv": "^16.4.0",
+    "@docflow/shared": "*"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
