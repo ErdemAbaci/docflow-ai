@@ -16,3 +16,8 @@ output "servicebus_connection_string" {
   value     = azurerm_servicebus_namespace.main.default_primary_connection_string
   sensitive = true
 }
+
+output "application_insights_connection_string" {
+  value     = azurerm_application_insights.main.connection_string
+  sensitive = true
+}

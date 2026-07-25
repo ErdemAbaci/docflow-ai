@@ -70,3 +70,19 @@ resource "azurerm_cosmosdb_sql_container" "documents" {
   database_name       = azurerm_cosmosdb_sql_database.main.name
   partition_key_paths = ["/tenantId"]
 }
+
+resource "azurerm_log_analytics_workspace" "main" {
+  name                = "log-docflow-${random_string.storage_suffix.result}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_application_insights" "main" {
+  name                = "appi-docflow-${random_string.storage_suffix.result}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  workspace_id        = azurerm_log_analytics_workspace.main.id
+  application_type    = "Node.JS"
+}

@@ -24,8 +24,23 @@
 
 ### Eksik (Hafta 1'i bitirmek için kalanlar)
 
-- [ ] **Application Insights** — henüz Terraform kaynağı yok. Şu anki structured log'lar sadece local terminal'de görünüyor, Azure'a gitmiyor. Eklenince API ve worker'daki `context.log`/`console.log` çağrıları merkezi olarak sorgulanabilir hale gelecek.
-- [ ] **Worker'ı Container Apps'e deploy etmek** — şu an sadece lokal `ts-node` ile çalışıyor. Gereken: Dockerfile, Container Apps environment, `minReplicas: 0` + Service Bus KEDA scaler (ADR-2 — henüz yazılmadı).
+- [x] **Application Insights altyapısı kuruldu** (Terraform, Azure'da apply edildi):
+  - `azurerm_log_analytics_workspace` (asıl log deposu, PerGB2018, 30 gün retention) + `azurerm_application_insights` (workspace-based, `application_type = "Node.JS"`)
+  - `application_insights_connection_string` output eklendi (sensitive)
+  - **Kalan (kod bağlantısı):** connection string'i API'nin app setting'ine ve worker container'a bağlamak — Functions runtime'ı otomatik enstrümante eder, worker'da SDK/OpenTelemetry gerekecek. Container Apps adımıyla birlikte yapılacak.
+- [x] **Dockerfile + lokal container testi** — worker artık container içinde çalışıyor:
+  - `Dockerfile` (repo kökü, multi-stage): build aşaması `npm ci` + shared→worker sırasıyla derleme; runtime aşaması `npm ci --omit=dev` + sadece `dist/` kopyalama, `USER node`, exec-form `CMD` (scale-to-zero'da SIGTERM'in Node'a ulaşması için)
+  - Build context = repo kökü (monorepo: worker `@docflow/shared`'a bağımlı)
+  - `.dockerignore` — **secret'lar image'a girmiyor** (`**/.env`, `**/local.settings.json`), ayrıca host `node_modules` (yanlış platform binary'leri) hariç
+  - ⚠️ Dosya adı `DockerFile` → `Dockerfile` olarak düzeltildi. macOS case-insensitive olduğu için lokalde sorun çıkarmıyordu ama Linux CI'da (`docker build`) kırılırdı.
+  - Test edildi: image 310 MB, container `--env-file` ile çalıştı, API'den upload → container kuyruktan çekti → Cosmos `processed`. `correlationId` API ve container loglarında eşleşti.
+- [ ] **ACR + Container Apps deploy** — 💰 ACR Basic sabit ~$5/ay başlayacak (budget alert kurulu). Sonra Container Apps Environment + Container App + `minReplicas: 0` KEDA scaler (ADR-2 — henüz yazılmadı). App Insights connection string'i de burada worker'a bağlanacak.
+
+## Maliyet güvenlik ağı
+
+- [x] **Budget alert kuruldu** — `StudentCredit`, kapsam: Billing account, **aylık $10**, gerçekleşen + tahmini (forecast) uyarıları e-postaya gidiyor. Geçerlilik: 01.07.2026 – 30.06.2028.
+  - Neden $10 doğru eşik: normal bir ay ~$0 (her şey kullanım bazlı/ücretsiz tier), ACR eklenince ~$5. Yani $10'a yaklaşmak "beklenmedik bir şey oluyor" demek. Hafta 4'te private endpoint'ler açıkken ~$20/ay olacağı için alarm çalacak — bu **istenen** davranış, o dönemin geçici olduğunu hatırlatır.
+  - ⚠️ Budget alert **harcamayı durdurmaz**, sadece haber verir (AWS Budgets ile aynı). Sabit ücretli kaynakları destroy etme disiplini hâlâ senin sorumluluğunda.
 
 ## Refactor durumu (Seçenek C — sözleşmeyi paylaş)
 
@@ -54,5 +69,5 @@ Karar: paylaşılan pakette **sadece tipler** (`@docflow/shared`), servis implem
 
 ## Sırada (öncelik sırasıyla)
 
-1. Application Insights + Container Apps deploy ile **Hafta 1'i gerçekten kapatmak**
+1. **Container Apps deploy** ile Hafta 1'i kapatmak: Dockerfile (✅ build aşaması yazıldı) → ACR → Container Apps Environment → Container App + KEDA scaler. App Insights connection string'i de burada worker'a bağlanacak.
 2. **Hafta 2** — Azure AI Document Intelligence (OCR) + AI ile yapılandırılmış veri çıkarımı, gerçek hata yönetimi/DLQ senaryosu, managed identity + Key Vault
