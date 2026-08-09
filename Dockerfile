@@ -1,5 +1,5 @@
 # ---- Build aşaması ----
-    FROM node:20-alpine AS build
+    FROM --platform=linux/amd64 node:20-alpine AS build
     WORKDIR /app
     
     # Önce sadece manifest dosyaları (layer cache için)
@@ -20,7 +20,7 @@
 
 
 # ---- Runtime aşaması ----
-    FROM node:20-alpine AS runtime
+    FROM --platform=linux/amd64 node:20-alpine AS runtime
     WORKDIR /app
     ENV NODE_ENV=production
     
