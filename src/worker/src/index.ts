@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { receiver } from "./clients";
-import { updateStatus } from "./services/documentRepository";
+import { getDocument, updateStatus } from "./services/documentRepository";
 import { config } from "./config";
 
 function log(event: string, fields: Record<string, unknown> = {}) {
@@ -10,6 +10,13 @@ function log(event: string, fields: Record<string, unknown> = {}) {
 receiver.subscribe({
   processMessage: async (message) => {
     const { trackingId, tenantId } = message.body as { trackingId: string; tenantId: string };
+
+    const existing = await getDocument(trackingId, tenantId);
+    if (existing?.status === "processed") {
+      log("document_processing_skipped_already_processed", { correlationId: trackingId });
+      return;
+    }
+
     log("document_processing_started", { correlationId: trackingId });
 
     // TODO: gerçek OCR + AI burada olacak (Hafta 2), şimdilik stub

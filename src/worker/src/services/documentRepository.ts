@@ -1,4 +1,4 @@
-import { DocumentStatus } from "@docflow/shared"
+import { DocumentStatus, DocumentRecord } from "@docflow/shared"
 import { cosmosClient } from "../clients";
 import { config } from "../config";
 
@@ -9,4 +9,9 @@ export async function updateStatus(trackingId: string, tenantId: string, status:
   { op: "replace", path: "/status", value: status },
   { op: "replace", path: "/updatedAt", value: new Date().toISOString() }
 ]);
+}
+
+export async function getDocument(trackingId: string, tenantId: string): Promise<DocumentRecord | undefined> {
+    const { resource } = await container.item(trackingId, tenantId).read<DocumentRecord>();
+    return resource;
 }
