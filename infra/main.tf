@@ -131,6 +131,21 @@ resource "azurerm_container_app" "worker" {
     value = azurerm_servicebus_namespace.main.default_primary_connection_string
   }
 
+  secret {
+    name  = "nvidia-api-key"
+    value = var.nvidia_api_key
+  }
+
+  secret {
+    name  = "document-intelligence-key"
+    value = azurerm_cognitive_account.document_intelligence.primary_access_key
+  }
+
+  secret {
+    name  = "storage-connection"
+    value = azurerm_storage_account.documents.primary_connection_string
+  }
+
   template {
     min_replicas = 0
     max_replicas = 3
@@ -170,6 +185,36 @@ resource "azurerm_container_app" "worker" {
         name  = "SERVICEBUS_QUEUE_NAME"
         value = azurerm_servicebus_queue.document_processing.name
       }
+
+      env {
+        name        = "NVIDIA_API_KEY"
+        secret_name = "nvidia-api-key"
+      }
+
+      env {
+        name  = "NVIDIA_API_URL"
+        value = var.nvidia_api_url
+      }
+
+      env {
+        name  = "DOCUMENT_INTELLIGENCE_ENDPOINT"
+        value = azurerm_cognitive_account.document_intelligence.endpoint
+      }
+
+      env {
+        name        = "DOCUMENT_INTELLIGENCE_KEY"
+        secret_name = "document-intelligence-key"
+      }
+
+      env {
+        name        = "DOCUMENTS_STORAGE_CONNECTION_STRING"
+        secret_name = "storage-connection"
+      }
+
+      env {
+        name  = "DOCUMENTS_CONTAINER_NAME"
+        value = azurerm_storage_container.documents.name
+      }
     }
 
     # KEDA: kuyruktaki mesaj sayısına göre 0 ↔ 3 replica
@@ -188,4 +233,12 @@ resource "azurerm_container_app" "worker" {
       }
     }
   }
+}
+
+resource "azurerm_cognitive_account" "document_intelligence" {
+  name                = "docflow-di-${random_string.storage_suffix.result}"
+  resource_group_name = azurerm_resource_group.main.name
+  location             = azurerm_resource_group.main.location
+  kind                = "FormRecognizer"
+  sku_name            = "F0"
 }

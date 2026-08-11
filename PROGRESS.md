@@ -1,7 +1,7 @@
 # DocFlow — İlerleme Kaydı
 
 > Bu dosya, ROADMAP.md'deki plana göre neyin bitip neyin bitmediğini takip eder.
-> Son güncelleme: Hafta 1, gün 1 sonu.
+> Son güncelleme: Hafta 2 — OCR + LLM alan çıkarımı bağlandı.
 
 ## Hafta 1 — Uçtan Uca İskelet: durum
 
@@ -34,7 +34,23 @@
   - `.dockerignore` — **secret'lar image'a girmiyor** (`**/.env`, `**/local.settings.json`), ayrıca host `node_modules` (yanlış platform binary'leri) hariç
   - ⚠️ Dosya adı `DockerFile` → `Dockerfile` olarak düzeltildi. macOS case-insensitive olduğu için lokalde sorun çıkarmıyordu ama Linux CI'da (`docker build`) kırılırdı.
   - Test edildi: image 310 MB, container `--env-file` ile çalıştı, API'den upload → container kuyruktan çekti → Cosmos `processed`. `correlationId` API ve container loglarında eşleşti.
-- [ ] **ACR + Container Apps deploy** — 💰 ACR Basic sabit ~$5/ay başlayacak (budget alert kurulu). Sonra Container Apps Environment + Container App + `minReplicas: 0` KEDA scaler (ADR-2 — henüz yazılmadı). App Insights connection string'i de burada worker'a bağlanacak.
+- [x] **ACR + Container Apps deploy** — 💰 açıldı, test edildi, **sonra bilinçli olarak destroy edildi** (aç-dene-kapat disiplini):
+  - `azurerm_container_registry` (Basic) + `azurerm_container_app_environment` + `azurerm_container_app.worker` (KEDA `custom_scale_rule`, Service Bus kuyruk uzunluğuna göre `min_replicas: 0, max_replicas: 3`)
+  - Docker image amd64 platform sorunları (host arm64 → Azure amd64, attestation manifest hatası) çözüldü: `docker build --platform linux/amd64 --provenance=false`
+  - Uçtan uca gerçek testte doğrulandı: API'ye upload → Azure'daki container işledi → Cosmos `processed` oldu
+  - **Scale-to-zero kanıtlandı** — iş bitince Azure API'den `ScaledToZero`, 0 replika teyit edildi
+  - `terraform destroy -target=azurerm_container_app.worker -target=azurerm_container_registry.main` ile kapatıldı, maliyet oluşmadığı doğrulandı. Terraform **kodu** `main.tf`'te duruyor — bir sonraki deploy'da tekrar `apply` yeterli.
+
+## Hafta 2 — Gerçek İşleme: OCR + AI
+
+- [x] **Idempotency** — worker işe başlamadan `getDocument()` ile kaydı okuyor, `status === "processed"` ise atlıyor. Service Bus'a elle duplicate mesaj basılarak test edildi, ikinci teslimatın gerçekten işlenmediği doğrulandı.
+- [x] **OCR (Document Intelligence)** — `prebuilt-invoice` yerine bilinçli olarak **`prebuilt-read`** seçildi: `Extractor` sözleşmesini (`extract(text: string)`) net tutmak ve OCR/LLM sorumluluklarını ayrı tutmak için. `ocrService.ts` (`extractText`) + `blobService.ts` (`downloadDocument`) yazıldı, `@azure-rest/ai-document-intelligence` (yeni SDK, eski `@azure/ai-form-recognizer` değil) kullanıldı. F0 (ücretsiz) tier'da Terraform ile açıldı, `terraform plan -target` ile sadece bu kaynak açıldı — ACR/Container App tekrar açılmadı.
+- [x] **LLM alan çıkarımı** — sağlayıcı: **NVIDIA NIM** (`build.nvidia.com`, ücretsiz endpoint, model: `nvidia/nemotron-3-nano-30b-a3b`, OpenAI-compatible API). `nvidiaExtractor.ts`, `Extractor` interface'ini (`@docflow/shared`) implemente ediyor. Gerçek API ile test edildi; ilk denemede `amount` alanı "ara toplam"ı seçmişti, sistem promptuna "vergiler dahil genel toplam" kuralı eklenince doğru tutarı (genel toplam) verdi.
+- [x] **Uçtan uca bağlama** — `index.ts`: blob indir → OCR → LLM → `saveExtractedFields()` (Cosmos'a `documentType/issueDate/amount/currency/vendor/summary` yazan yeni fonksiyon, JSON Patch `"add"` — alanlar opsiyonel olduğu için `"replace"` ilk yazımda hata verirdi). Gerçek bir test PDF'iyle uçtan uca doğrulandı (blob yükle → indir → OCR → LLM → Cosmos'a yaz → geri oku → temizle).
+- [x] **Terraform: Container App'e yeni secret/env'ler eklendi** (henüz apply edilmedi, ACR/Container App şu an kapalı) — `NVIDIA_API_KEY/URL`, `DOCUMENT_INTELLIGENCE_ENDPOINT/KEY`, `DOCUMENTS_STORAGE_CONNECTION_STRING/CONTAINER_NAME`. `infra/variables.tf` + `infra/terraform.tfvars` (gitignore'da) eklendi — NVIDIA key Terraform kaynağından türetilemeyen tek dış sır.
+- [ ] **Hata yönetimi** — LLM/OCR hatası şu an sadece `processError`'a düşüyor, `status: "failed"` yazılmıyor. Henüz yapılmadı.
+- [ ] Worker unit testleri (LLM mock'lu)
+- [ ] Managed identity + Key Vault (ADR-4)
 
 ## Maliyet güvenlik ağı
 
@@ -69,5 +85,7 @@ Karar: paylaşılan pakette **sadece tipler** (`@docflow/shared`), servis implem
 
 ## Sırada (öncelik sırasıyla)
 
-1. **Container Apps deploy** ile Hafta 1'i kapatmak: Dockerfile (✅ build aşaması yazıldı) → ACR → Container Apps Environment → Container App + KEDA scaler. App Insights connection string'i de burada worker'a bağlanacak.
-2. **Hafta 2** — Azure AI Document Intelligence (OCR) + AI ile yapılandırılmış veri çıkarımı, gerçek hata yönetimi/DLQ senaryosu, managed identity + Key Vault
+1. **Hata yönetimi** — LLM/OCR hatasında `status: "failed"` + neden Cosmos'a; max delivery count dolunca DLQ davranışını gözlemlemek
+2. **Worker unit testleri** — `Extractor` mock'lanarak, gerçek API'ye para/istek harcamadan
+3. **Managed identity + Key Vault** (ADR-4) — connection string/admin key yerine identity
+4. **Azure'a tekrar deploy** — ACR + Container App'i aç, yeni image'ı (openai/storage-blob/document-intelligence bağımlılıklarıyla) push et, uçtan uca Azure'da test et, sonra yine kapat

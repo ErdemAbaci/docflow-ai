@@ -28,3 +28,20 @@ export interface DocumentQueueMessage {
   trackingId: string;
   tenantId: string;
 }
+
+// LLM'in OCR metninden çıkardığı alanlar. Bulunamayan alan null olur
+// (undefined değil) — "arandı ama yok" ile "hiç aranmadı" farkını netleştirir.
+export interface ExtractedFields {
+  documentType: string;
+  issueDate: string | null;
+  amount: number | null;
+  currency: string | null;
+  vendor: string | null;
+  summary: string | null;
+}
+
+// Worker'ın LLM sağlayıcısını bilmeden kullandığı sözleşme.
+// Gerçek implementasyon (ör. NVIDIA NIM) worker/src/services/extractors altında olacak.
+export interface Extractor {
+  extract(text: string): Promise<ExtractedFields>;
+}

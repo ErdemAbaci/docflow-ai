@@ -1,6 +1,9 @@
 import "dotenv/config";
 import { receiver } from "./clients";
-import { getDocument, updateStatus } from "./services/documentRepository";
+import { getDocument, saveExtractedFields } from "./services/documentRepository";
+import { downloadDocument } from "./services/blobService";
+import { extractText } from "./services/ocrService";
+import { nvidiaExtractor } from "./services/extractors/nvidiaExtractor";
 import { config } from "./config";
 
 function log(event: string, fields: Record<string, unknown> = {}) {
@@ -16,13 +19,17 @@ receiver.subscribe({
       log("document_processing_skipped_already_processed", { correlationId: trackingId });
       return;
     }
+    if (!existing) {
+      throw new Error(`Cosmos kaydı bulunamadı: trackingId=${trackingId}, tenantId=${tenantId}`);
+    }
 
     log("document_processing_started", { correlationId: trackingId });
 
-    // TODO: gerçek OCR + AI burada olacak (Hafta 2), şimdilik stub
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    const fileBuffer = await downloadDocument(existing.blobPath);
+    const text = await extractText(fileBuffer);
+    const fields = await nvidiaExtractor.extract(text);
 
-    await updateStatus(trackingId, tenantId, "processed");
+    await saveExtractedFields(trackingId, tenantId, fields);
 
     log("document_processing_completed", { correlationId: trackingId });
   },

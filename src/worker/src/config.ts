@@ -19,4 +19,16 @@ export const config = {
     connectionString: required("SERVICEBUS_CONNECTION_STRING"),
     queueName: required("SERVICEBUS_QUEUE_NAME"),
   },
+  nvidia: {
+    apiKey: required("NVIDIA_API_KEY"),
+    apiUrl: required("NVIDIA_API_URL"),
+  },
+  storage: {
+    connectionString: required("DOCUMENTS_STORAGE_CONNECTION_STRING"),
+    containerName: required("DOCUMENTS_CONTAINER_NAME"),
+  },
+  documentIntelligence: {
+    endpoint: required("DOCUMENT_INTELLIGENCE_ENDPOINT"),
+    key: required("DOCUMENT_INTELLIGENCE_KEY"),
+  },
 };

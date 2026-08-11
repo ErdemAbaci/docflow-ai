@@ -12,6 +12,10 @@
     "@azure/service-bus": "^7.9.0",
     "@azure/cosmos": "^4.1.0",
     "dotenv": "^16.4.0",
+    "openai": "^4.68.0",
+    "@azure/storage-blob": "^12.24.0",
+    "@azure-rest/ai-document-intelligence": "^1.0.0",
+    "@azure/core-auth": "^1.9.0",
     "@docflow/shared": "*"
   },
   "devDependencies": {

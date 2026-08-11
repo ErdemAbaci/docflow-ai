@@ -25,3 +25,12 @@ output "application_insights_connection_string" {
 output "acr_login_server" {
   value = azurerm_container_registry.main.login_server
 }
+
+output "document_intelligence_endpoint" {
+  value = azurerm_cognitive_account.document_intelligence.endpoint
+}
+
+output "document_intelligence_key" {
+  value     = azurerm_cognitive_account.document_intelligence.primary_access_key
+  sensitive = true
+}
