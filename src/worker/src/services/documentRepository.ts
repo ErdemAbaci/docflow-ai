@@ -31,6 +31,21 @@ export async function saveExtractedFields(
   ]);
 }
 
+// Bir işleme denemesi başarısız olduğunda çağrılır. "add" kullanıyoruz çünkü
+// errorReason ilk hatada Cosmos kaydında henüz yok; sonraki denemelerde
+// "add" var olan path'i de günceller (RFC 6902), yani en son hatayı gösterir.
+export async function markFailed(
+  trackingId: string,
+  tenantId: string,
+  errorReason: string
+): Promise<void> {
+  await container.item(trackingId, tenantId).patch([
+    { op: "replace", path: "/status", value: "failed" satisfies DocumentStatus },
+    { op: "replace", path: "/updatedAt", value: new Date().toISOString() },
+    { op: "add", path: "/errorReason", value: errorReason },
+  ]);
+}
+
 export async function getDocument(trackingId: string, tenantId: string): Promise<DocumentRecord | undefined> {
     const { resource } = await container.item(trackingId, tenantId).read<DocumentRecord>();
     return resource;
