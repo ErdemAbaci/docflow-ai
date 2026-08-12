@@ -1,7 +1,7 @@
 # DocFlow — İlerleme Kaydı
 
 > Bu dosya, ROADMAP.md'deki plana göre neyin bitip neyin bitmediğini takip eder.
-> Son güncelleme: Hafta 2 — OCR + LLM alan çıkarımı bağlandı.
+> Son güncelleme: **Hafta 2 tamamlandı** — hata yönetimi, worker unit testleri, managed identity + Key Vault bitti.
 
 ## Hafta 1 — Uçtan Uca İskelet: durum
 
@@ -47,10 +47,10 @@
 - [x] **OCR (Document Intelligence)** — `prebuilt-invoice` yerine bilinçli olarak **`prebuilt-read`** seçildi: `Extractor` sözleşmesini (`extract(text: string)`) net tutmak ve OCR/LLM sorumluluklarını ayrı tutmak için. `ocrService.ts` (`extractText`) + `blobService.ts` (`downloadDocument`) yazıldı, `@azure-rest/ai-document-intelligence` (yeni SDK, eski `@azure/ai-form-recognizer` değil) kullanıldı. F0 (ücretsiz) tier'da Terraform ile açıldı, `terraform plan -target` ile sadece bu kaynak açıldı — ACR/Container App tekrar açılmadı.
 - [x] **LLM alan çıkarımı** — sağlayıcı: **NVIDIA NIM** (`build.nvidia.com`, ücretsiz endpoint, model: `nvidia/nemotron-3-nano-30b-a3b`, OpenAI-compatible API). `nvidiaExtractor.ts`, `Extractor` interface'ini (`@docflow/shared`) implemente ediyor. Gerçek API ile test edildi; ilk denemede `amount` alanı "ara toplam"ı seçmişti, sistem promptuna "vergiler dahil genel toplam" kuralı eklenince doğru tutarı (genel toplam) verdi.
 - [x] **Uçtan uca bağlama** — `index.ts`: blob indir → OCR → LLM → `saveExtractedFields()` (Cosmos'a `documentType/issueDate/amount/currency/vendor/summary` yazan yeni fonksiyon, JSON Patch `"add"` — alanlar opsiyonel olduğu için `"replace"` ilk yazımda hata verirdi). Gerçek bir test PDF'iyle uçtan uca doğrulandı (blob yükle → indir → OCR → LLM → Cosmos'a yaz → geri oku → temizle).
-- [x] **Terraform: Container App'e yeni secret/env'ler eklendi** (henüz apply edilmedi, ACR/Container App şu an kapalı) — `NVIDIA_API_KEY/URL`, `DOCUMENT_INTELLIGENCE_ENDPOINT/KEY`, `DOCUMENTS_STORAGE_CONNECTION_STRING/CONTAINER_NAME`. `infra/variables.tf` + `infra/terraform.tfvars` (gitignore'da) eklendi — NVIDIA key Terraform kaynağından türetilemeyen tek dış sır.
-- [ ] **Hata yönetimi** — LLM/OCR hatası şu an sadece `processError`'a düşüyor, `status: "failed"` yazılmıyor. Henüz yapılmadı.
-- [ ] Worker unit testleri (LLM mock'lu)
-- [ ] Managed identity + Key Vault (ADR-4)
+- [x] **Terraform: Container App'e yeni secret/env'ler eklendi** — `NVIDIA_API_KEY/URL`, `DOCUMENT_INTELLIGENCE_ENDPOINT`, `DOCUMENTS_STORAGE_ACCOUNT_URL/CONTAINER_NAME`. `infra/variables.tf` + `infra/terraform.tfvars` (gitignore'da) eklendi — NVIDIA key Terraform kaynağından türetilemeyen tek dış sır. ACR/Container App'in kendisi hâlâ kapalı (deploy günü `apply` edilecek), ama bu blok artık managed identity'ye göre güncel.
+- [x] **Hata yönetimi** — `messageHandler.ts`: zincirde bir adım (OCR/LLM/Cosmos yazımı) patlarsa `markFailed()` ile Cosmos'a `status: "failed"` + `errorReason` yazılıyor, sonra hata yeniden fırlatılıyor. Bilerek yutulmuyor — aksi halde Service Bus mesajı `complete` sayardı ve `max_delivery_count: 5` + DLQ mekanizması hiç devreye girmezdi. Her başarısız denemede `errorReason` en son hatayla güncelleniyor.
+- [x] **Worker unit testleri** — iş mantığı `index.ts`'ten `messageHandler.ts`'e çıkarıldı (gerçek Azure client'larına dokunmadan test edilebilsin diye). `messageHandler.test.ts` (vitest): processed-skip, kayıt-yok-hata, başarılı-akış, hata-akışı (`markFailed` doğru `errorReason` ile çağrılıyor mu + hata yeniden fırlatılıyor mu) — 4/4 yeşil.
+- [x] **Managed identity + Key Vault (ADR-4)** — worker artık Cosmos/Storage/Service Bus/Document Intelligence'a key/connection-string yerine `azurerm_user_assigned_identity` + RBAC (`azurerm_role_assignment`, Cosmos için ayrıca `azurerm_cosmosdb_sql_role_assignment`) ile bağlanıyor; kod tarafında `DefaultAzureCredential` (`@azure/identity`). NVIDIA API key (tek gerçek dış sır, RBAC'in koruyamayacağı) Key Vault'a taşındı, Container App `key_vault_secret_id` ile referans veriyor — worker koduna dokunmadan. `servicebus-connection` secret'ı istisna: KEDA'nın kuyruk derinliği ölçümü için hâlâ gerekli (worker kodu değil, Container Apps platform katmanı kullanıyor). Aynı roller lokal geliştirme için Terraform'u çalıştıran Azure AD kullanıcısına da verildi (`az login` ile test edilebilsin diye). Gerçek Azure'a karşı `e2e-test.ts` ile uçtan uca doğrulandı — key olmadan, sadece RBAC ile blob yükleme/indirme, OCR, Cosmos okuma/yazma çalıştı.
 
 ## Maliyet güvenlik ağı
 
@@ -81,11 +81,12 @@ Karar: paylaşılan pakette **sadece tipler** (`@docflow/shared`), servis implem
 
 - **`GetDocumentStatus`, Cosmos'un iç sistem alanlarını (`_rid`, `_self`, `_etag`, `_ts`) hâlâ sızdırıyor** — bir mapper/DTO ile temizlenecek. (Not: `getDocument` tipi `DocumentRecord` ama TS tipleri runtime şeklini değiştirmez, Cosmos alanları yine ekliyor.)
 - **`tenantId: "demo-tenant"` her yerde hardcode** — gerçek auth (Entra External ID, Hafta 3) gelene kadar bilinçli bir sadeleştirme.
-- **Connection string ile kimlik doğrulama** — Hafta 2'de managed identity'ye geçilecek (ADR-4, CLAUDE.md'nin "secrets Key Vault'a" ilkesi).
+- ~~Connection string ile kimlik doğrulama~~ — çözüldü, bkz. Hafta 2 / Managed Identity + Key Vault (ADR-4).
 
-## Sırada (öncelik sırasıyla)
+## Sırada (öncelik sırasıyla) — Hafta 3
 
-1. **Hata yönetimi** — LLM/OCR hatasında `status: "failed"` + neden Cosmos'a; max delivery count dolunca DLQ davranışını gözlemlemek
-2. **Worker unit testleri** — `Extractor` mock'lanarak, gerçek API'ye para/istek harcamadan
-3. **Managed identity + Key Vault** (ADR-4) — connection string/admin key yerine identity
-4. **Azure'a tekrar deploy** — ACR + Container App'i aç, yeni image'ı (openai/storage-blob/document-intelligence bağımlılıklarıyla) push et, uçtan uca Azure'da test et, sonra yine kapat
+1. **Azure'a tekrar deploy** — ACR + Container App'i aç, yeni image'ı (openai/storage-blob/document-intelligence/identity bağımlılıklarıyla) push et, managed identity'li Terraform'u uçtan uca Azure'da test et, sonra yine kapat
+2. **Sorgu endpoint'leri** — `GET /documents` (tarih aralığı, tutar, belge tipi filtreleri), `GET /documents/{id}`
+3. **Event Grid** — worker bitince `DocumentProcessed` event'i → webhook
+4. **DLQ operasyon derinliği** — mesajı bilerek zehirle → 5 teslimattan sonra DLQ'ya düştüğünü gözlemle → yeniden işleyen küçük bir script/endpoint
+5. **Auth (opsiyonel, 2 gün kuralı)** — Entra External ID; çözülmezse Function key ile geç

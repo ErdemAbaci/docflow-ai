@@ -3,13 +3,10 @@ import DocumentIntelligence, {
   getLongRunningPoller,
   isUnexpected,
 } from "@azure-rest/ai-document-intelligence";
-import { AzureKeyCredential } from "@azure/core-auth";
+import { DefaultAzureCredential } from "@azure/identity";
 import { config } from "../config";
 
-const client = DocumentIntelligence(
-  config.documentIntelligence.endpoint,
-  new AzureKeyCredential(config.documentIntelligence.key)
-);
+const client = DocumentIntelligence(config.documentIntelligence.endpoint, new DefaultAzureCredential());
 
 export async function extractText(fileBuffer: Buffer): Promise<string> {
   const initialResponse = await client

@@ -1,4 +1,5 @@
 import { BlobServiceClient } from "@azure/storage-blob";
+import { DefaultAzureCredential } from "@azure/identity";
 import { randomUUID } from "crypto";
 import { config } from "./src/config";
 import { downloadDocument } from "./src/services/blobService";
@@ -55,7 +56,7 @@ async function main() {
     "Genel Toplam 1680.00 TL",
   ]);
 
-  const blobServiceClient = BlobServiceClient.fromConnectionString(config.storage.connectionString);
+  const blobServiceClient = new BlobServiceClient(config.storage.accountUrl, new DefaultAzureCredential());
   const containerClient = blobServiceClient.getContainerClient(config.storage.containerName);
   await containerClient.getBlockBlobClient(trackingId).uploadData(pdfBuffer);
 

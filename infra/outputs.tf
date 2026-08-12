@@ -34,3 +34,13 @@ output "document_intelligence_key" {
   value     = azurerm_cognitive_account.document_intelligence.primary_access_key
   sensitive = true
 }
+
+# Managed identity geçişinden sonra worker'ın .env'inde artık key değil bu
+# ikisi kullanılıyor — sır değiller, sadece hostname/URL.
+output "storage_blob_endpoint" {
+  value = azurerm_storage_account.documents.primary_blob_endpoint
+}
+
+output "servicebus_namespace_host" {
+  value = "${azurerm_servicebus_namespace.main.name}.servicebus.windows.net"
+}

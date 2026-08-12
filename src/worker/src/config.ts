@@ -11,12 +11,13 @@ function required(name: string): string {
 export const config = {
   cosmos: {
     endpoint: required("COSMOS_ENDPOINT"),
-    key: required("COSMOS_KEY"),
     database: required("COSMOS_DATABASE"),
     container: required("COSMOS_CONTAINER"),
   },
   serviceBus: {
-    connectionString: required("SERVICEBUS_CONNECTION_STRING"),
+    // Connection string yerine sadece namespace hostname'i — kimlik doğrulama
+    // artık DefaultAzureCredential ile (managed identity / az login) yapılıyor.
+    namespace: required("SERVICEBUS_NAMESPACE"),
     queueName: required("SERVICEBUS_QUEUE_NAME"),
   },
   nvidia: {
@@ -24,11 +25,10 @@ export const config = {
     apiUrl: required("NVIDIA_API_URL"),
   },
   storage: {
-    connectionString: required("DOCUMENTS_STORAGE_CONNECTION_STRING"),
+    accountUrl: required("DOCUMENTS_STORAGE_ACCOUNT_URL"),
     containerName: required("DOCUMENTS_CONTAINER_NAME"),
   },
   documentIntelligence: {
     endpoint: required("DOCUMENT_INTELLIGENCE_ENDPOINT"),
-    key: required("DOCUMENT_INTELLIGENCE_KEY"),
   },
 };
