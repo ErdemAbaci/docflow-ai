@@ -334,6 +334,15 @@ resource "azurerm_role_assignment" "worker_servicebus" {
   principal_id         = each.value
 }
 
+# Sadece yerel kimliğe (worker'a değil): worker prodüksiyonda hiç mesaj
+# göndermiyor, sadece alıyor. Bu rol DLQ operasyon script'lerinin (zehirli
+# mesaj gönderme, redrive) yerelden çalışabilmesi için gerekiyor.
+resource "azurerm_role_assignment" "local_dev_servicebus_sender" {
+  scope                = azurerm_servicebus_namespace.main.id
+  role_definition_name = "Azure Service Bus Data Sender"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
 resource "azurerm_role_assignment" "worker_document_intelligence" {
   for_each             = local.worker_and_local_dev_principals
   scope                = azurerm_cognitive_account.document_intelligence.id

@@ -98,4 +98,16 @@ describe("handleDocumentMessage", () => {
     );
     expect(saveExtractedFields).not.toHaveBeenCalled();
   });
+
+  it("hatanın .message'ı boşsa (ör. Blob 404 RestError) name/statusCode'a düşer", async () => {
+    vi.mocked(getDocument).mockResolvedValue(baseRecord);
+    const restError = new Error("");
+    restError.name = "RestError";
+    (restError as unknown as { statusCode: number }).statusCode = 404;
+    vi.mocked(downloadDocument).mockRejectedValue(restError);
+
+    await expect(handleDocumentMessage(trackingId, tenantId)).rejects.toThrow();
+
+    expect(markFailed).toHaveBeenCalledWith(trackingId, tenantId, "RestError: HTTP 404");
+  });
 });

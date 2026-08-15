@@ -4,6 +4,18 @@ import { extractText } from "./services/ocrService";
 import { nvidiaExtractor } from "./services/extractors/nvidiaExtractor";
 import { log } from "./log";
 
+// Bazı Azure SDK hataları (ör. Blob 404 RestError) .message'ı boş bırakıp
+// gerçek bilgiyi .name / .statusCode'da taşıyor — sadece .message'a
+// güvenirsek errorReason boş kalır.
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    if (error.message) return error.message;
+    const statusCode = (error as { statusCode?: number }).statusCode;
+    return [error.name, statusCode ? `HTTP ${statusCode}` : undefined].filter(Boolean).join(": ") || String(error);
+  }
+  return String(error);
+}
+
 export async function handleDocumentMessage(trackingId: string, tenantId: string): Promise<void> {
   const existing = await getDocument(trackingId, tenantId);
   if (existing?.status === "processed") {
@@ -25,7 +37,7 @@ export async function handleDocumentMessage(trackingId: string, tenantId: string
 
     log("document_processing_completed", { correlationId: trackingId });
   } catch (error) {
-    const errorReason = error instanceof Error ? error.message : String(error);
+    const errorReason = describeError(error);
     await markFailed(trackingId, tenantId, errorReason);
     log("document_processing_failed", { correlationId: trackingId, error: errorReason });
     throw error;
