@@ -3,7 +3,7 @@ import { downloadDocument } from "./services/blobService";
 import { extractText } from "./services/ocrService";
 import { nvidiaExtractor } from "./services/extractors/nvidiaExtractor";
 import { log } from "./log";
-
+import { publishDocumentProcessed } from "./services/eventGridService";
 // Bazı Azure SDK hataları (ör. Blob 404 RestError) .message'ı boş bırakıp
 // gerçek bilgiyi .name / .statusCode'da taşıyor — sadece .message'a
 // güvenirsek errorReason boş kalır.
@@ -36,6 +36,15 @@ export async function handleDocumentMessage(trackingId: string, tenantId: string
     await saveExtractedFields(trackingId, tenantId, fields);
 
     log("document_processing_completed", { correlationId: trackingId });
+    try {
+      await publishDocumentProcessed(trackingId, tenantId, fields);
+      log("document_processed_event_published", { correlationId: trackingId });
+    } catch (error) {
+      log("document_processed_event_publish_failed", {
+        correlationId: trackingId,
+        error: describeError(error),
+      });
+    }
   } catch (error) {
     const errorReason = describeError(error);
     await markFailed(trackingId, tenantId, errorReason);

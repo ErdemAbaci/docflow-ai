@@ -44,3 +44,7 @@ output "storage_blob_endpoint" {
 output "servicebus_namespace_host" {
   value = "${azurerm_servicebus_namespace.main.name}.servicebus.windows.net"
 }
+
+output "eventgrid_topic_endpoint" {
+  value = azurerm_eventgrid_topic.main.endpoint
+}

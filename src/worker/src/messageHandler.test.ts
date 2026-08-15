@@ -14,11 +14,17 @@ vi.mock("./services/ocrService", () => ({
 vi.mock("./services/extractors/nvidiaExtractor", () => ({
   nvidiaExtractor: { extract: vi.fn() },
 }));
+// Mock şart: eventGridService -> config zincirinde EVENTGRID_TOPIC_ENDPOINT
+// import anında okunuyor, testlerde .env yüklenmediği için gerçek modül patlar.
+vi.mock("./services/eventGridService", () => ({
+  publishDocumentProcessed: vi.fn(),
+}));
 
 import { getDocument, saveExtractedFields, markFailed } from "./services/documentRepository";
 import { downloadDocument } from "./services/blobService";
 import { extractText } from "./services/ocrService";
 import { nvidiaExtractor } from "./services/extractors/nvidiaExtractor";
+import { publishDocumentProcessed } from "./services/eventGridService";
 import { handleDocumentMessage } from "./messageHandler";
 
 const trackingId = "track-1";
@@ -79,6 +85,30 @@ describe("handleDocumentMessage", () => {
     expect(extractText).toHaveBeenCalledWith(Buffer.from("pdf-bytes"));
     expect(nvidiaExtractor.extract).toHaveBeenCalledWith("ocr metni");
     expect(saveExtractedFields).toHaveBeenCalledWith(trackingId, tenantId, fields);
+    expect(publishDocumentProcessed).toHaveBeenCalledWith(trackingId, tenantId, fields);
+    expect(markFailed).not.toHaveBeenCalled();
+  });
+
+  it("event yayınlama patlarsa işlem yine başarılı sayılır (markFailed yok, hata fırlatılmaz)", async () => {
+    vi.mocked(getDocument).mockResolvedValue(baseRecord);
+    vi.mocked(downloadDocument).mockResolvedValue(Buffer.from("pdf-bytes"));
+    vi.mocked(extractText).mockResolvedValue("ocr metni");
+    vi.mocked(nvidiaExtractor.extract).mockResolvedValue({
+      documentType: "fatura",
+      issueDate: "2026-08-11",
+      amount: 100,
+      currency: "TRY",
+      vendor: null,
+      summary: null,
+    });
+    vi.mocked(publishDocumentProcessed).mockRejectedValue(new Error("Event Grid erişilemedi"));
+
+    await expect(handleDocumentMessage(trackingId, tenantId)).resolves.toBeUndefined();
+
+    // Belge zaten Cosmos'a yazıldı; bildirim gitmemesi işlemi başarısız yapmaz.
+    // Aksi halde Service Bus mesajı yeniden teslim eder ve OCR+LLM boşuna
+    // tekrar çalışır (= para).
+    expect(saveExtractedFields).toHaveBeenCalled();
     expect(markFailed).not.toHaveBeenCalled();
   });
 

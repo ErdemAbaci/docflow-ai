@@ -228,6 +228,11 @@ resource "azurerm_container_app" "worker" {
         name  = "DOCUMENTS_CONTAINER_NAME"
         value = azurerm_storage_container.documents.name
       }
+
+      env {
+        name  = "EVENTGRID_TOPIC_ENDPOINT"
+        value = azurerm_eventgrid_topic.main.endpoint
+      }
     }
 
     # KEDA: kuyruktaki mesaj sayısına göre 0 ↔ 3 replica
@@ -361,4 +366,17 @@ resource "azurerm_cosmosdb_sql_role_assignment" "worker" {
   role_definition_id  = "${azurerm_cosmosdb_account.main.id}/sqlRoleDefinitions/00000000-0000-0000-0000-000000000002"
   principal_id        = each.value
   scope               = azurerm_cosmosdb_account.main.id
+}
+
+resource "azurerm_eventgrid_topic" "main" {
+  name                = "evgt-docflow-${random_string.storage_suffix.result}"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+}
+
+resource "azurerm_role_assignment" "worker_eventgrid" {
+  for_each             = local.worker_and_local_dev_principals
+  scope                = azurerm_eventgrid_topic.main.id
+  role_definition_name = "EventGrid Data Sender"
+  principal_id         = each.value
 }

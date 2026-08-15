@@ -31,4 +31,7 @@ export const config = {
   documentIntelligence: {
     endpoint: required("DOCUMENT_INTELLIGENCE_ENDPOINT"),
   },
+  eventGrid: {
+    topicEndpoint: required("EVENTGRID_TOPIC_ENDPOINT"),
+  },
 };
