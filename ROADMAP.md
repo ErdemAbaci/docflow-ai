@@ -21,7 +21,7 @@
 
 ## Hafta 0 — Hazırlık (1-2 gün)
 
-- [ ] 🔴 **YAPILMADI — ÖNCELİKLİ:** Azure Cost Management'ta **budget alert** kur ($20 / $50 / $80 eşiklerinde e-posta) — AWS Billing Alarm muadili. 5 dakikalık iş, tüm maliyet disiplininin son savunma hattı. Sabit ücretli kaynaklar (ACR, private endpoint) girmeden önce kurulmalı.
+- [x] Azure Cost Management'ta **budget alert** kuruldu (portalden, `StudentCredit`, aylık $10, gerçekleşen + tahmini uyarı). Detay: PROGRESS.md → "Maliyet güvenlik ağı".
 - [ ] GitHub repo aç (`git init` + remote), temel dizin yapısı:
   ```
   /infra          → Terraform
@@ -59,11 +59,12 @@ Amaç: upload → queue → worker (stub) → Cosmos → sorgu zinciri sahte ver
 
 ## Hafta 3 — Sorgu API'si, Bildirim, Auth
 
-- [ ] **Sorgu endpoint'leri:** `GET /documents` (tarih aralığı, min/max tutar, belge tipi filtreleri), `GET /documents/{id}`. Cosmos sorgularında partition key her zaman filtrede olsun — cross-partition query, DynamoDB Scan gibi pahalı
-- [ ] **Event Grid:** worker bitince `DocumentProcessed` event'i → webhook tüketici (EventBridge/SNS muadili)
-- [ ] **DLQ operasyon derinliği** (APIM'den boşalan zaman buraya): mesajı bilerek zehirle → 5 teslimattan sonra DLQ'ya düştüğünü gözlemle → DLQ'daki mesajları listeleyip yeniden işleyen küçük bir operasyon script'i/endpoint'i yaz. Bu, "queue-ağırlıklı derin iş akışı" portföy boşluğunun tam merkezi ve APIM'den çok daha iyi bir mülakat hikâyesi. Maliyeti $0.
-- [ ] **Auth — Entra External ID (opsiyonel):** ücretsiz tier (ilk 50K MAU). ⚠️ **2 gün kuralı:** çözülmezse v1'i **Function key** ile koru (`authLevel: 'function'` — anonymous'tan çıkar), README'ye "auth v2" notu düş ve geç. Portföy boşluklarından hiçbirine dokunmadığı için burada inat etmeye değmez.
-- [ ] Kritik akış için 1-2 integration test (upload → poll → sonuç doğrula)
+- [x] **Sorgu endpoint'leri:** `GET /documents` (`ListDocuments.ts`, tarih aralığı/min-max tutar/belge tipi filtreleri) + `GET /documents/{id}` (`GetDocument.ts`). `queryDocuments()` Cosmos sorgusunda `partitionKey` seçeneğini kullanıyor (WHERE'e elle `tenantId` yazmak yeterli değil — cross-partition fan-out'u asıl engelleyen SDK'nın `partitionKey` opsiyonu). Gerçek Azure'a karşı test edildi (filtresiz liste, `amountMin/Max` sayısal doğrulama → `400`, olmayan id → `404`). Ayrıca `UploadDocument` artık 4MB üstü dosyayı erken reddediyor (Document Intelligence F0 tier'ın kendi sabit limiti — üstü zaten OCR aşamasında patlayıp Service Bus'ı 5 kez boşuna yeniden dener).
+- [x] **Event Grid — yayınlama:** worker başarıyla işleyince `DocFlow.DocumentProcessed` event'i `eventGridService.ts` ile topic'e yayınlanıyor. Yayınlama hatası worker'ın ana akışını **patlatmıyor** (ayrı try/catch, sadece loglanıyor) — belge zaten Cosmos'a yazıldı, bildirim hatası yüzünden Service Bus'ın mesajı yeniden teslim edip OCR+LLM'i boşuna tekrarlamasını istemiyoruz. Gerçek Azure'a karşı uçtan uca doğrulandı (`document_processed_event_published` logu).
+  - ⏸️ **Webhook aboneliği henüz yok** — Event Grid'in hedefe POST atabilmesi için internetten erişilebilir bir HTTPS URL gerekiyor, o da Function App'in gerçekten Azure'a deploy edilmesini gerektiriyor (Hafta 4, GitHub Actions + OIDC). O yüzden abonelik Hafta 4'e taşındı, ayrı bir Hafta 3 maddesi olarak değil.
+- [x] **DLQ operasyon derinliği:** üç script (`poison-dlq-demo.ts`, `list-dlq-demo.ts`, `redrive-dlq-demo.ts`) ile gerçek Azure Service Bus'a karşı uçtan uca gösterildi — zehirle → worker 5 kez dener → `MaxDeliveryCount` aşılınca otomatik DLQ'ya düşer → DLQ'daki mesaj okunur (`deadLetterReason` + Cosmos `errorReason` yan yana) → kök neden düzeltilip mesaj ana kuyruğa geri gönderilir → worker başarıyla işler. Yol boyunca 2 gerçek bug bulunup düzeltildi: (1) bazı Azure SDK hataları `.message`'ı boş bırakıyordu, `errorReason` boş kaydediliyordu → `describeError()` fallback'i eklendi; (2) redrive script'i ilk halinde yanlış blob path'e yüklüyordu → Cosmos'taki gerçek `blobPath`'i okuyacak şekilde düzeltildi. Ayrıca yerel geliştirme kimliğine Service Bus **Data Sender** rolü eklendi (worker'ın kendisi hâlâ sadece Receiver — bu script'ler için gerekliydi).
+- [ ] **Auth — Entra External ID:** proje sonuna ertelendi (kullanıcı kararı, bu maddenin "2 gün kuralı"nın yerine geçti). v1 şimdilik `authLevel: 'anonymous'` — Function key'e geçiş de auth ile birlikte ele alınacak.
+- [ ] Kritik akış için 1-2 integration test (upload → poll → sonuç doğrula) — henüz yazılmadı.
 
 > **APIM neden yok:** Karar kaydına bakın — üç portföy boşluğunun hiçbirine hizmet etmiyor, API Gateway deneyimi zaten mevcut, ve Hafta 3 zaten dolu. Rate limiting v1'de Function key ile karşılanıyor.
 
@@ -127,7 +128,7 @@ Kaynakların çoğu kullanım bazlı, **ama ikisi sabit** — kredinin asıl dü
 Üç portföy boşluğuna (container / VNet / queue) hizmet **etmeyen** işler önce gider:
 
 1. ~~APIM~~ (zaten çıkarıldı)
-2. Auth / Entra External ID → Function key + "auth v2" notu
-3. Event Grid bildirim akışı (queue'dan farklı bir pattern olduğu için son çare)
+2. Auth / Entra External ID → Function key + "auth v2" notu (proje sonuna ertelendi, karar verildi)
+3. ~~Event Grid bildirim akışı~~ (yayınlama tarafı bitti; sadece webhook aboneliği Hafta 4'e — Function App deploy'una — bağımlı)
 
 **Asla kesilmez:** Container Apps + KEDA scale-to-zero, VNet + Private Endpoint, Service Bus derinliği (DLQ + idempotency + retry).

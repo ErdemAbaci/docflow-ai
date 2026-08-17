@@ -1,7 +1,7 @@
 # DocFlow — İlerleme Kaydı
 
 > Bu dosya, ROADMAP.md'deki plana göre neyin bitip neyin bitmediğini takip eder.
-> Son güncelleme: **Hafta 2 tamamlandı** — hata yönetimi, worker unit testleri, managed identity + Key Vault bitti.
+> Son güncelleme: **Hafta 3 büyük ölçüde tamamlandı** — sorgu endpoint'leri, Event Grid yayınlama, DLQ operasyon derinliği bitti. Kalan: webhook aboneliği (Hafta 4'e bağımlı), auth (proje sonuna ertelendi), integration testler.
 
 ## Hafta 1 — Uçtan Uca İskelet: durum
 
@@ -52,6 +52,19 @@
 - [x] **Worker unit testleri** — iş mantığı `index.ts`'ten `messageHandler.ts`'e çıkarıldı (gerçek Azure client'larına dokunmadan test edilebilsin diye). `messageHandler.test.ts` (vitest): processed-skip, kayıt-yok-hata, başarılı-akış, hata-akışı (`markFailed` doğru `errorReason` ile çağrılıyor mu + hata yeniden fırlatılıyor mu) — 4/4 yeşil.
 - [x] **Managed identity + Key Vault (ADR-4)** — worker artık Cosmos/Storage/Service Bus/Document Intelligence'a key/connection-string yerine `azurerm_user_assigned_identity` + RBAC (`azurerm_role_assignment`, Cosmos için ayrıca `azurerm_cosmosdb_sql_role_assignment`) ile bağlanıyor; kod tarafında `DefaultAzureCredential` (`@azure/identity`). NVIDIA API key (tek gerçek dış sır, RBAC'in koruyamayacağı) Key Vault'a taşındı, Container App `key_vault_secret_id` ile referans veriyor — worker koduna dokunmadan. `servicebus-connection` secret'ı istisna: KEDA'nın kuyruk derinliği ölçümü için hâlâ gerekli (worker kodu değil, Container Apps platform katmanı kullanıyor). Aynı roller lokal geliştirme için Terraform'u çalıştıran Azure AD kullanıcısına da verildi (`az login` ile test edilebilsin diye). Gerçek Azure'a karşı `e2e-test.ts` ile uçtan uca doğrulandı — key olmadan, sadece RBAC ile blob yükleme/indirme, OCR, Cosmos okuma/yazma çalıştı.
 
+## Hafta 3 — Sorgu API'si, DLQ, Event Grid
+
+- [x] **Sorgu endpoint'leri** — `GET /documents` (`ListDocuments.ts`) tarih aralığı/min-max tutar/belge tipi filtreleriyle, `GET /documents/{id}` (`GetDocument.ts`). `documentRepository.ts`'e eklenen `queryDocuments()`, Cosmos'un `partitionKey` sorgu seçeneğini kullanıyor — cross-partition fan-out'u asıl engelleyen bu, elle `WHERE c.tenantId = ...` yazmak değil. Gerçek Azure'a karşı test edildi: filtresiz liste, `amountMin/Max` yanlış tipte → `400`, olmayan id → `404`, ve (Event Grid testinden sonra) gerçek bir `amount` alanıyla filtreleme doğrulandı.
+- [x] **Upload boyut limiti** — `UploadDocument.ts` artık 4MB üstü dosyayı `Content-Length` + gerçek buffer boyutu kontrolüyle erken reddediyor (`413`). Sebep: Document Intelligence F0 (ücretsiz) tier zaten dosya başına 4MB ile sınırlı ve çok sayfalı PDF'lerde sadece ilk 2 sayfayı işliyor; üstü zaten OCR'da patlayıp Service Bus'ı `max_delivery_count: 5` boyunca boşuna yeniden dener.
+- [x] **DLQ operasyon derinliği** — üç script yazıldı (`src/worker/poison-dlq-demo.ts`, `list-dlq-demo.ts`, `redrive-dlq-demo.ts`) ve gerçek Azure Service Bus'a karşı uçtan uca çalıştırıldı:
+  1. **Zehirle** — Cosmos'a var olmayan bir `blobPath`'e işaret eden sahte kayıt + Service Bus mesajı
+  2. **Gözlemle** — worker 5 kez dener (`MaxDeliveryCount`), her denemede aynı hata, sonra Service Bus mesajı otomatik DLQ'ya taşıyor. `list-dlq-demo.ts` DLQ'daki mesajları `deadLetterReason` + Cosmos'taki `errorReason` ile yan yana gösteriyor.
+  3. **Kurtar** — `redrive-dlq-demo.ts` DLQ'dan mesajı bulup, Cosmos'taki gerçek `blobPath`'e düzeltilmiş bir dosya yükleyip, mesajı ana kuyruğa geri gönderip DLQ'dan tamamlıyor. Worker mesajı tekrar alıp bu sefer başarıyla işledi (`status: processed`, alanlar doğru çıkarıldı).
+  - **Yol boyunca bulunup düzeltilen 2 gerçek bug:** (1) `messageHandler.ts` — bazı Azure SDK hataları (`RestError`, Blob 404) `.message`'ı boş bırakıyor, `errorReason` boş kaydediliyordu; `describeError()` helper'ı `.name`/`.statusCode`'a fallback yapacak şekilde eklendi, yeni bir test yazıldı. (2) `redrive-dlq-demo.ts`'in ilk hali düzeltmeyi `trackingId` adlı bir blob'a yüklüyordu ama Cosmos'taki gerçek `blobPath` farklıydı; script Cosmos kaydını okuyup gerçek `blobPath`'i kullanacak şekilde düzeltildi.
+  - **Terraform:** yerel geliştirme kimliğine (worker'ın kendisine değil — o prodüksiyonda hiç mesaj göndermiyor) Service Bus **Data Sender** rolü eklendi, bu script'lerin yerelden çalışabilmesi için.
+- [x] **Event Grid — yayınlama** — `eventGridService.ts` (`EventGridPublisherClient`, `DefaultAzureCredential`, key yok) worker başarıyla işleyince `DocFlow.DocumentProcessed` event'i yayınlıyor. Yayınlama hatası ayrı bir `try/catch`'te yutulup sadece loglanıyor — belge zaten Cosmos'a yazıldı, bildirim hatası yüzünden Service Bus'ın mesajı tekrar teslim edip OCR+LLM'i boşuna tekrarlamasını istemiyoruz (worker unit testinde bu senaryo da test edildi). Terraform: `azurerm_eventgrid_topic` + worker/yerel kimliğe "EventGrid Data Sender" rolü. Gerçek Azure'a karşı uçtan uca doğrulandı (`document_processed_event_published` logu, Cosmos'ta doğru alanlar).
+  - ⏸️ **Webhook aboneliği yok** — Event Grid'in event'i POST atabileceği internetten erişilebilir bir hedef gerekiyor, o da Function App'in Azure'a gerçekten deploy edilmesini gerektiriyor (Hafta 4). Şimdilik event "havaya" yayınlanıyor, kimse dinlemiyor — bu bilinçli bir ara durum.
+
 ## Maliyet güvenlik ağı
 
 - [x] **Budget alert kuruldu** — `StudentCredit`, kapsam: Billing account, **aylık $10**, gerçekleşen + tahmini (forecast) uyarıları e-postaya gidiyor. Geçerlilik: 01.07.2026 – 30.06.2028.
@@ -83,10 +96,9 @@ Karar: paylaşılan pakette **sadece tipler** (`@docflow/shared`), servis implem
 - **`tenantId: "demo-tenant"` her yerde hardcode** — gerçek auth (Entra External ID, Hafta 3) gelene kadar bilinçli bir sadeleştirme.
 - ~~Connection string ile kimlik doğrulama~~ — çözüldü, bkz. Hafta 2 / Managed Identity + Key Vault (ADR-4).
 
-## Sırada (öncelik sırasıyla) — Hafta 3
+## Sırada (öncelik sırasıyla)
 
-1. **Azure'a tekrar deploy** — ACR + Container App'i aç, yeni image'ı (openai/storage-blob/document-intelligence/identity bağımlılıklarıyla) push et, managed identity'li Terraform'u uçtan uca Azure'da test et, sonra yine kapat
-2. **Sorgu endpoint'leri** — `GET /documents` (tarih aralığı, tutar, belge tipi filtreleri), `GET /documents/{id}`
-3. **Event Grid** — worker bitince `DocumentProcessed` event'i → webhook
-4. **DLQ operasyon derinliği** — mesajı bilerek zehirle → 5 teslimattan sonra DLQ'ya düştüğünü gözlemle → yeniden işleyen küçük bir script/endpoint
-5. **Auth (opsiyonel, 2 gün kuralı)** — Entra External ID; çözülmezse Function key ile geç
+1. **Worker Container App redeploy** — ACR + Container App'i aç, yeni image'ı (openai/storage-blob/document-intelligence/identity/eventgrid bağımlılıklarıyla, ve bu haftaki `messageHandler.ts`/DLQ/Event Grid değişiklikleriyle) push et, managed identity'li Terraform'u uçtan uca Azure'da test et, sonra yine kapat. Bağımsız bir iş, Hafta 4'ü beklemeden yapılabilir.
+2. **Hafta 4** — VNet + Private Endpoint, GitHub Actions + OIDC (bu adımda Function App ilk kez gerçekten Azure'a deploy edilecek — o zaman Event Grid webhook aboneliği de buraya eklenecek), README (İngilizce, mimari diyagram + ADR'ler)
+3. **Integration testler (1-2 tane)** — upload → poll → sonuç doğrulama, Hafta 3'ten kalan tek madde
+4. **Auth (proje sonu)** — Entra External ID; kullanıcı kararıyla en sona ertelendi
