@@ -18,8 +18,12 @@ resource "azurerm_federated_identity_credential" "ci_github_main" {
   audience            = ["api://AzureADTokenExchange"]
   issuer              = "https://token.actions.githubusercontent.com"
   # Sadece main branch'e push'ta bu kimliğe girilebilir — başka repo/branch
-  # bu token'ı kullanamaz.
-  subject = "repo:ErdemAbaci/docflow-ai:ref:refs/heads/main"
+  # bu token'ı kullanamaz. Format klasik "repo:owner/repo:ref:..." değil,
+  # çünkü GitHub bu repo için varsayılan olarak subject'e immutable ID'leri
+  # de ekliyor (repo silinip aynı isimle yeniden oluşturulursa eski
+  # federated credential'ın yeni repoyu kabul etmemesi için). Doğrulama:
+  # gh api repos/ErdemAbaci/docflow-ai/actions/oidc/customization/sub
+  subject = "repo:ErdemAbaci@147172631/docflow-ai@1305849848:ref:refs/heads/main"
 }
 
 # Terraform'un kendi kodu role assignment / cosmos sql role assignment
