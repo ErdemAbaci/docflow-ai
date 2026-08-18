@@ -1,0 +1,35 @@
+name: Terraform Plan (OIDC doğrulama)
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: true
+      TF_VAR_nvidia_api_key: "dummy-value-plan-only"
+      TF_VAR_local_dev_principal_id: "00000000-0000-0000-0000-000000000000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+
+      - run: terraform init
+
+      - run: terraform plan -no-color

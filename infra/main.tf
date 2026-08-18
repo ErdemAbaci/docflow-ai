@@ -299,7 +299,7 @@ resource "azurerm_key_vault_secret" "nvidia_api_key" {
 resource "azurerm_role_assignment" "terraform_keyvault_admin" {
   scope                = azurerm_key_vault.main.id
   role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = var.local_dev_principal_id
 }
 
 resource "azurerm_role_assignment" "worker_keyvault_secrets" {
@@ -321,7 +321,7 @@ resource "azurerm_role_assignment" "worker_acr_pull" {
 locals {
   worker_and_local_dev_principals = toset([
     azurerm_user_assigned_identity.worker.principal_id,
-    data.azurerm_client_config.current.object_id,
+    var.local_dev_principal_id,
   ])
 }
 
@@ -345,7 +345,7 @@ resource "azurerm_role_assignment" "worker_servicebus" {
 resource "azurerm_role_assignment" "local_dev_servicebus_sender" {
   scope                = azurerm_servicebus_namespace.main.id
   role_definition_name = "Azure Service Bus Data Sender"
-  principal_id         = data.azurerm_client_config.current.object_id
+  principal_id         = var.local_dev_principal_id
 }
 
 resource "azurerm_role_assignment" "worker_document_intelligence" {

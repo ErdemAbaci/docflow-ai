@@ -48,3 +48,19 @@ output "servicebus_namespace_host" {
 output "eventgrid_topic_endpoint" {
   value = azurerm_eventgrid_topic.main.endpoint
 }
+
+# GitHub Actions OIDC secret'ları için — bunlar sır değil, sadece kimlik
+# numaraları (client secret/şifre yok). GitHub repo: Settings > Secrets and
+# variables > Actions altına AZURE_CLIENT_ID / AZURE_TENANT_ID /
+# AZURE_SUBSCRIPTION_ID isimleriyle eklenecek.
+output "ci_client_id" {
+  value = azurerm_user_assigned_identity.ci.client_id
+}
+
+output "azure_tenant_id" {
+  value = data.azurerm_client_config.current.tenant_id
+}
+
+output "azure_subscription_id" {
+  value = data.azurerm_client_config.current.subscription_id
+}
