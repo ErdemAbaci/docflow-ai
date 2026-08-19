@@ -22,7 +22,7 @@ jobs:
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: true
       TF_VAR_nvidia_api_key: "dummy-value-plan-only"
-      TF_VAR_local_dev_principal_id: "00000000-0000-0000-0000-000000000000"
+      TF_VAR_local_dev_principal_id: ${{ vars.LOCAL_DEV_PRINCIPAL_ID }}
     steps:
       - uses: actions/checkout@v4
 
