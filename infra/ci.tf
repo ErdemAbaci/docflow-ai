@@ -42,3 +42,12 @@ resource "azurerm_role_assignment" "ci_user_access_admin" {
   role_definition_name = "User Access Administrator"
   principal_id         = azurerm_user_assigned_identity.ci.principal_id
 }
+
+# Sadece okuma: Terraform "plan" sırasında Key Vault'taki mevcut secret
+# değerini gerçek değerle karşılaştırabilmek için okuma erişimine ihtiyaç
+# duyuyor (apply/yazma değil — CI şu an hiçbir şeyi apply etmiyor).
+resource "azurerm_role_assignment" "ci_keyvault_secrets_reader" {
+  scope                = azurerm_key_vault.main.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.ci.principal_id
+}
